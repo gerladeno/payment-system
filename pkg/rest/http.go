@@ -15,9 +15,8 @@ import (
 
 type WalletStore interface {
 	CreateWallet(ctx context.Context, wallet string, owner int) error
-	Deposit(ctx context.Context, wallet string, amount float64, key string) error
-	Withdraw()
-	TransferFunds()
+	DepositWithdraw(ctx context.Context, wallet string, amount float64, key string) error
+	TransferFunds(ctx context.Context, from, to string, amount float64, key string) error
 	Report()
 	CheckOwnerWallet(ctx context.Context, wallet string, owner int) (bool, error)
 }

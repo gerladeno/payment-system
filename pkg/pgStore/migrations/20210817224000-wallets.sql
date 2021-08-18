@@ -8,6 +8,7 @@ CREATE TABLE wallet
         CONSTRAINT wallet_pk PRIMARY KEY,
     amount  numeric(12, 2) DEFAULT 0     NOT NULL CHECK (amount >= 0),
     owner   int                          NOT NULL,
+    status  smallint       DEFAULT 0     NOT NULL,
     updated timestamp      DEFAULT NOW() NOT NULL,
     created timestamp      DEFAULT NOW() NOT NULL
 );
@@ -24,39 +25,9 @@ CREATE TABLE transaction
     ts              timestamp DEFAULT NOW() NOT NULL
 );
 
-CREATE TABLE owner
-(
-    owner   int                     NOT NULL,
-    wallet  uuid                    NOT NULL,
-    created timestamp DEFAULT NOW() NOT NULL
-);
-
-CREATE UNIQUE INDEX owner_wallet_index ON owner (owner, wallet);
-
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION insert_owner_wallet_f()
-    RETURNS TRIGGER
-AS
-$$
-BEGIN
-    INSERT INTO owner (owner, wallet, created)
-    VALUES (NEW.owner, NEW.wallet, NEW.created)
-    ON CONFLICT DO NOTHING;
-    RETURN NULL;
-END;
-$$
-LANGUAGE plpgsql;
--- +migrate StatementEnd
-
-DROP TRIGGER IF EXISTS insert_owner_wallet_t
-    ON wallet;
-CREATE TRIGGER insert_owner_wallet_t
-    AFTER INSERT
-    ON wallet
-    FOR EACH ROW
-    EXECUTE PROCEDURE insert_owner_wallet_f();
+CREATE INDEX transaction_wallet_index ON transaction (wallet);
+CREATE INDEX transaction_wallet_receiver_index ON transaction (wallet_receiver) WHERE wallet_receiver IS NOT NULL;
 
 -- +migrate Down
 DROP TABLE wallet CASCADE;
 DROP TABLE transaction CASCADE;
-DROP TABLE owner CASCADE;
