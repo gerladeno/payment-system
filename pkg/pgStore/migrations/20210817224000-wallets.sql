@@ -20,7 +20,7 @@ CREATE TABLE transaction
     type            smallint                NOT NULL,
     wallet          uuid                    NOT NULL,
     wallet_receiver uuid,
-    key             char(64) UNIQUE         NOT NULL,
+    key             text UNIQUE             NOT NULL,
     amount          numeric(12, 2)          NOT NULL,
     ts              timestamp DEFAULT NOW() NOT NULL
 );

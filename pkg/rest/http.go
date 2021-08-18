@@ -10,6 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"payment-system/pkg/pgStore"
 	"time"
 )
 
@@ -17,7 +18,7 @@ type WalletStore interface {
 	CreateWallet(ctx context.Context, wallet string, owner int) error
 	DepositWithdraw(ctx context.Context, wallet string, amount float64, key string) error
 	TransferFunds(ctx context.Context, from, to string, amount float64, key string) error
-	Report()
+	Report(ctx context.Context, wallet string, from, to *time.Time, tType pgStore.TransactionType) ([]pgStore.Transaction, error)
 	CheckOwnerWallet(ctx context.Context, wallet string, owner int) (bool, error)
 }
 
@@ -42,7 +43,7 @@ func NewRouter(log *logrus.Logger, walletStore WalletStore, version string) *chi
 			r.Get("/deposit", h.deposit)
 			r.Get("/withdraw", h.withdraw)
 			r.Get("/transferFunds", h.transferFunds)
-			r.Get("/createReport", h.createReport)
+			r.Get("/report", h.createReport)
 		})
 	})
 	return r

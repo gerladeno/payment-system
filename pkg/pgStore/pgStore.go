@@ -59,12 +59,12 @@ func (pg *PG) Migrate() error {
 	return err
 }
 
-func (pg *PG) tx(ctx context.Context, method string, fn func(tx *sql.Tx) error) error {
-	var tx *sql.Tx
+func (pg *PG) tx(ctx context.Context, method string, fn func(tx *sqlx.Tx) error) error {
+	var tx *sqlx.Tx
 	var err error
 	started := time.Now()
 	for i := 0; i < txRetries; i++ {
-		if tx, err = pg.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted}); err != nil {
+		if tx, err = pg.db.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted}); err != nil {
 			pkg.MetricDBErrors.WithLabelValues(method).Inc()
 			continue
 		}

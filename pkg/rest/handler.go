@@ -4,13 +4,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/gocarina/gocsv"
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"payment-system/pkg"
 	"payment-system/pkg/pgStore"
 	"regexp"
 	"strconv"
+	"strings"
+	"time"
 )
+
+const dateFmt = `2006-01-02`
 
 var ErrInvalidUUIDFormat = errors.New("err invalid uuid format")
 var ErrWalletNotSpecified = errors.New("err wallet not specified in the query")
@@ -181,10 +186,6 @@ func (h *Handler) transferFunds(w http.ResponseWriter, r *http.Request) {
 		writeErrResponse(w, "Forbidden", http.StatusForbidden)
 		return
 	}
-	if !ok {
-		writeErrResponse(w, "Forbidden", http.StatusForbidden)
-		return
-	}
 	_, err = h.walletStore.CheckOwnerWallet(r.Context(), to, 0)
 	switch err {
 	case pgStore.ErrWalletNotFound:
@@ -213,6 +214,83 @@ func (h *Handler) transferFunds(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) createReport(w http.ResponseWriter, r *http.Request) {
+	wallet, err := parseAndValidateWallet(r, "wallet")
+	if err != nil {
+		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
+		return
+	}
+	from, err := parseDate(r, "from")
+	if err != nil {
+		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
+		return
+	}
+	to, err := parseDate(r, "to")
+	if err != nil {
+		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
+		return
+	}
+	tType, err := parseTransactionType(r)
+	if err != nil {
+		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
+		return
+	}
+	owner := pkg.ClientFromCtx(r.Context()).ID
+	ok, err := h.walletStore.CheckOwnerWallet(r.Context(), wallet, owner)
+	if err != nil {
+		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		writeErrResponse(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	transactions, err := h.walletStore.Report(r.Context(), wallet, from, to, tType)
+	if err != nil {
+		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
+		return
+	}
+	if csv := r.URL.Query().Get("csv"); csv == "" {
+		writeOkResponse(w, transactions)
+		return
+	}
+	w.Header().Set("Content-type", "text/csv")
+	w.Header().Set("Content-Disposition", "attachment;filename=Report.csv")
+	data, err := toCsv(transactions)
+	if err != nil {
+		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
+		return
+	}
+	_, err = w.Write(data)
+	if err != nil {
+		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
+	}
+}
+
+func parseTransactionType(r *http.Request) (pgStore.TransactionType, error) {
+	s := r.URL.Query().Get("type")
+	switch strings.ToLower(s) {
+	case "0", "deposit":
+		return pgStore.TransactionDeposit, nil
+	case "1", "withdrawal", "withdraw":
+		return pgStore.TransactionWithdrawal, nil
+	case "2", "transfer", "transferfrom":
+		return pgStore.TransactionTransferFunds, nil
+	case "3", "transferto":
+		return pgStore.TransactionTransferFundsTo, nil
+	case "":
+		return pgStore.AllTransactions, nil
+	default:
+		return 0, pgStore.ErrInvalidTransactionType
+	}
+}
+
+func parseDate(r *http.Request, name string) (*time.Time, error) {
+	s := r.URL.Query().Get(name)
+	if s == "" {
+		return nil, nil
+	}
+	t, err := time.Parse(dateFmt, s)
+	return &t, err
 }
 
 func parseAndValidateWallet(r *http.Request, name string) (string, error) {
@@ -254,4 +332,12 @@ func writeOkResponse(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-type", "application/json")
 	ok := http.StatusOK
 	_ = json.NewEncoder(w).Encode(JSONResponse{Data: &data, Code: &ok})
+}
+
+func toCsv(data interface{}) ([]byte, error) {
+	result, err := gocsv.MarshalBytes(data)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
