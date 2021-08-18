@@ -1,0 +1,12 @@
+version: "2"
+
+services:
+  pg:
+    image: postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: user_pw
+      POSTGRES_DB: payments
+    ports:
+      - "5433:5432"
+    command: [ "postgres", "-c", "log_statement=all" ]
