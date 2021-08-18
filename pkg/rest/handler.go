@@ -39,6 +39,24 @@ func NewHandler(log *logrus.Logger, walletStore WalletStore) *Handler {
 	}
 }
 
+func (h *Handler) getWallet(w http.ResponseWriter, r *http.Request) {
+	wallet, err := parseAndValidateWallet(r, "wallet")
+	if err != nil {
+		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
+		return
+	}
+	result, err := h.walletStore.GetWallet(r.Context(), wallet)
+	if err != nil {
+		writeErrResponse(w, fmt.Sprintf("Not Found: %s", pgStore.ErrWalletNotFound), http.StatusNotFound)
+	}
+	owner := pkg.ClientFromCtx(r.Context()).ID
+	if result.Owner != owner {
+		writeErrResponse(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	writeOkResponse(w, result)
+}
+
 func (h *Handler) createWallet(w http.ResponseWriter, r *http.Request) {
 	wallet, err := parseAndValidateWallet(r, "wallet")
 	if err != nil {
@@ -51,6 +69,7 @@ func (h *Handler) createWallet(w http.ResponseWriter, r *http.Request) {
 			writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
 			return
 		}
+		h.log.Warnf("err creating wallet %s: %s", wallet, err)
 		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -84,6 +103,7 @@ func (h *Handler) deposit(w http.ResponseWriter, r *http.Request) {
 		return
 	case nil:
 	default:
+		h.log.Warnf("err checking wallet %s: %s", wallet, err)
 		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -98,6 +118,7 @@ func (h *Handler) deposit(w http.ResponseWriter, r *http.Request) {
 			writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
 			return
 		}
+		h.log.Warnf("err depositing to wallet %s: %s", wallet, err)
 		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -127,6 +148,7 @@ func (h *Handler) withdraw(w http.ResponseWriter, r *http.Request) {
 	owner := pkg.ClientFromCtx(r.Context()).ID
 	ok, err := h.walletStore.CheckOwnerWallet(r.Context(), wallet, owner)
 	if err != nil {
+		h.log.Warnf("err checking wallet %s: %s", wallet, err)
 		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -145,6 +167,7 @@ func (h *Handler) withdraw(w http.ResponseWriter, r *http.Request) {
 			writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
 			return
 		}
+		h.log.Warnf("err withdrawing from wallet %s: %s", wallet, err)
 		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -179,6 +202,7 @@ func (h *Handler) transferFunds(w http.ResponseWriter, r *http.Request) {
 	owner := pkg.ClientFromCtx(r.Context()).ID
 	ok, err := h.walletStore.CheckOwnerWallet(r.Context(), from, owner)
 	if err != nil {
+		h.log.Warnf("err checking wallet %s: %s", from, err)
 		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -193,6 +217,7 @@ func (h *Handler) transferFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	case nil:
 	default:
+		h.log.Warnf("err checking wallet %s: %s", to, err)
 		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -207,6 +232,7 @@ func (h *Handler) transferFunds(w http.ResponseWriter, r *http.Request) {
 			writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
 			return
 		}
+		h.log.Warnf("err transfering funds from %s to %s: %s", from, to, err)
 		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -237,6 +263,7 @@ func (h *Handler) createReport(w http.ResponseWriter, r *http.Request) {
 	owner := pkg.ClientFromCtx(r.Context()).ID
 	ok, err := h.walletStore.CheckOwnerWallet(r.Context(), wallet, owner)
 	if err != nil {
+		h.log.Warnf("err checking wallet %s: %s", wallet, err)
 		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -246,6 +273,7 @@ func (h *Handler) createReport(w http.ResponseWriter, r *http.Request) {
 	}
 	transactions, err := h.walletStore.Report(r.Context(), wallet, from, to, tType)
 	if err != nil {
+		h.log.Warnf("err creating report on %s: %s", wallet, err)
 		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -257,11 +285,13 @@ func (h *Handler) createReport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment;filename=Report.csv")
 	data, err := toCsv(transactions)
 	if err != nil {
+		h.log.Warnf("err converting report to csv: %s", err)
 		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
 		return
 	}
 	_, err = w.Write(data)
 	if err != nil {
+		h.log.Warnf("err writing csv response: %s", err)
 		writeErrResponse(w, fmt.Sprintf("Internal server error: %s", err), http.StatusInternalServerError)
 	}
 }

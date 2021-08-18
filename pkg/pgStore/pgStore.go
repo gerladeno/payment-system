@@ -36,8 +36,8 @@ func GetPGStore(log *logrus.Logger, dsn string) (*PG, error) {
 	}, nil
 }
 
-func (pg *PG) Migrate() error {
-	fn := func() func(string) ([]string, error) {
+func (pg *PG) Migrate(direction migrate.MigrationDirection) error {
+	assetDir := func() func(string) ([]string, error) {
 		return func(path string) ([]string, error) {
 			dirEntry, err := migrations.ReadDir(path)
 			if err != nil {
@@ -49,13 +49,13 @@ func (pg *PG) Migrate() error {
 			}
 			return entries, nil
 		}
-	}
+	}()
 	asset := migrate.AssetMigrationSource{
 		Asset:    migrations.ReadFile,
-		AssetDir: fn(),
+		AssetDir: assetDir,
 		Dir:      "migrations",
 	}
-	_, err := migrate.Exec(pg.db.DB, "postgres", asset, migrate.Up)
+	_, err := migrate.Exec(pg.db.DB, "postgres", asset, direction)
 	return err
 }
 
@@ -93,4 +93,17 @@ func (pg *PG) tx(ctx context.Context, method string, fn func(tx *sqlx.Tx) error)
 	}
 	pkg.MetricDBTime.WithLabelValues(method).Observe(time.Since(started).Seconds())
 	return err
+}
+
+// Truncate for tests
+func (pg *PG) Truncate() error {
+	_, err := pg.db.Exec( "TRUNCATE TABLE wallet;")
+	if err != nil {
+		return err
+	}
+	_, err = pg.db.Exec( "TRUNCATE TABLE transaction;")
+	if err != nil {
+		return err
+	}
+	return nil
 }

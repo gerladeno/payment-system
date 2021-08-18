@@ -21,14 +21,19 @@ const (
 	AllTransactions = -1
 )
 const pgDateTimeFmt = `2006-01-02 15:04:05`
+const getWalletQuery = `
+SELECT wallet, amount, owner, status, updated, created
+FROM wallet
+WHERE wallet = $1
+`
 const createWalletQuery = `
 INSERT INTO wallet (wallet, owner)
 VALUES ($1, $2)
 ON CONFLICT (wallet) DO NOTHING;
 `
 const changeBalanceQuery = `
-UPDATE wallet SET amount = wallet.amount + $1
-WHERE wallet = $2 AND amount >= ($1 * -1)
+UPDATE wallet SET amount = wallet.amount + $1::numeric(12, 2)
+WHERE wallet = $2 AND amount >= ($1::numeric(12, 2) * -1)
 `
 const walletReportTmpl = `
 SELECT id, type, wallet, wallet_receiver, key, amount, ts
@@ -49,6 +54,23 @@ type ErrDuplicateAction string
 
 func (e ErrDuplicateAction) Error() string {
 	return fmt.Sprintf("duplicate key: %s", string(e))
+}
+
+type Wallet struct {
+	Amount  float64   `db:"amount" json:"amount"`
+	Wallet  string    `db:"wallet" json:"wallet"`
+	Owner   int       `db:"owner" json:"owner"`
+	Status  int8      `db:"status" json:"status"`
+	Updated time.Time `db:"updated" json:"updated"`
+	Created time.Time `db:"created" json:"created"`
+}
+
+func (pg *PG) GetWallet(ctx context.Context, wallet string) (Wallet, error) {
+	result := Wallet{}
+	err := pg.tx(ctx, "GetWallet", func(tx *sqlx.Tx) error {
+		return tx.GetContext(ctx, &result, getWalletQuery, wallet)
+	})
+	return result, err
 }
 
 func (pg *PG) CreateWallet(ctx context.Context, wallet string, owner int) error {
@@ -150,7 +172,7 @@ type transaction struct {
 	Ts             time.Time       `db:"ts"`
 }
 
-func (t transaction) tx2Tx() Transaction{
+func (t transaction) tx2Tx() Transaction {
 	return Transaction{
 		ID:             t.ID,
 		Type:           t.Type,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/onrik/logrus/sentry"
+	migrate "github.com/rubenv/sql-migrate"
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"os"
@@ -28,7 +29,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to get pgStore: %s", err)
 	}
-	if err = pg.Migrate(); err != nil {
+	if err = pg.Migrate(migrate.Up); err != nil {
 		log.Fatalf("err migrating pg store: %s", err)
 	}
 	router := rest.NewRouter(log, pg, version)

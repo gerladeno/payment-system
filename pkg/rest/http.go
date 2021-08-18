@@ -15,6 +15,7 @@ import (
 )
 
 type WalletStore interface {
+	GetWallet(ctx context.Context, wallet string) (pgStore.Wallet, error)
 	CreateWallet(ctx context.Context, wallet string, owner int) error
 	DepositWithdraw(ctx context.Context, wallet string, amount float64, key string) error
 	TransferFunds(ctx context.Context, from, to string, amount float64, key string) error
@@ -40,6 +41,7 @@ func NewRouter(log *logrus.Logger, walletStore WalletStore, version string) *chi
 		r.Use(auth(walletStore))
 		r.Route("/v1", func(r chi.Router) {
 			r.Get("/createWallet", h.createWallet)
+			r.Get("/getWallet", h.getWallet)
 			r.Get("/deposit", h.deposit)
 			r.Get("/withdraw", h.withdraw)
 			r.Get("/transferFunds", h.transferFunds)
