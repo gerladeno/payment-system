@@ -111,7 +111,7 @@ WHERE wallet = $2 AND amount >= ($1 * -1)`
 		query = `
 UPDATE wallet SET amount = wallet.amount + $1
 WHERE wallet = $2 AND amount >= ($1 * -1)`
-		result, err = tx.ExecContext(ctx, query, amount, to)
+		_, err = tx.ExecContext(ctx, query, amount, to)
 		if err != nil {
 			return err
 		}
