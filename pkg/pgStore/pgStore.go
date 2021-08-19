@@ -14,7 +14,7 @@ import (
 )
 
 const txRetries = 3
-const maxConnectionsPools = 90
+const maxConnections = 90
 
 // TODO do we need an opLog? add a table with wallet history if needed
 
@@ -33,7 +33,7 @@ func GetPGStore(ctx context.Context, log *logrus.Logger, dsn string) (*PG, error
 		return nil, err
 	}
 	config.ConnConfig.PreferSimpleProtocol = true
-	config.MaxConns = maxConnectionsPools
+	config.MaxConns = maxConnections
 	db, err := pgxpool.ConnectConfig(ctx, config)
 	if err != nil {
 		return nil, err
