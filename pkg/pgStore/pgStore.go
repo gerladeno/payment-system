@@ -16,6 +16,8 @@ import (
 const txRetries = 3
 const maxConnectionsPools = 90
 
+// TODO do we need an opLog? add a table with wallet history if needed
+
 //go:embed migrations
 var migrations embed.FS
 
