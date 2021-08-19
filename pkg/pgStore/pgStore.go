@@ -5,7 +5,8 @@ import (
 	"database/sql"
 	"embed"
 	"errors"
-	"github.com/jmoiron/sqlx"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	migrate "github.com/rubenv/sql-migrate"
 	"github.com/sirupsen/logrus"
 	"payment-system/pkg"
@@ -13,34 +14,49 @@ import (
 )
 
 const txRetries = 3
+const maxConnectionsPools = 90
 
 //go:embed migrations
 var migrations embed.FS
 
 type PG struct {
-	db  *sqlx.DB
+	db  *pgxpool.Pool
+	dsn string
 	log *logrus.Logger
 }
 
-func GetPGStore(log *logrus.Logger, dsn string) (*PG, error) {
-	db, err := sqlx.Connect("pgx", dsn)
+func GetPGStore(ctx context.Context, log *logrus.Logger, dsn string) (*PG, error) {
+	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, err
 	}
-	if err = db.Ping(); err != nil {
+	config.ConnConfig.PreferSimpleProtocol = true
+	config.MaxConns = maxConnectionsPools
+	db, err := pgxpool.ConnectConfig(ctx, config)
+	if err = db.Ping(ctx); err != nil {
 		return nil, err
 	}
 	return &PG{
 		db:  db,
+		dsn: dsn,
 		log: log,
 	}, nil
 }
 
-func (pg *PG) DC() error {
-	return pg.db.Close()
+func (pg *PG) DC() {
+	pg.db.Close()
 }
 
 func (pg *PG) Migrate(direction migrate.MigrationDirection) error {
+	conn, err := sql.Open("pgx", pg.dsn)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			pg.log.Error("err closing migration connection")
+		}
+	}()
 	assetDir := func() func(string) ([]string, error) {
 		return func(path string) ([]string, error) {
 			dirEntry, err := migrations.ReadDir(path)
@@ -59,37 +75,38 @@ func (pg *PG) Migrate(direction migrate.MigrationDirection) error {
 		AssetDir: assetDir,
 		Dir:      "migrations",
 	}
-	_, err := migrate.Exec(pg.db.DB, "postgres", asset, direction)
+	_, err = migrate.Exec(conn, "postgres", asset, direction)
 	return err
 }
 
-func (pg *PG) tx(ctx context.Context, method string, fn func(tx *sqlx.Tx) error) error {
-	var tx *sqlx.Tx
+func (pg *PG) tx(ctx context.Context, method string, fn func(tx pgx.Tx) error) error {
 	var err error
 	started := time.Now()
 	for i := 0; i < txRetries; i++ {
-		if tx, err = pg.db.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted}); err != nil {
+		var tx pgx.Tx
+		if tx, err = pg.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}); err != nil {
 			pkg.MetricDBErrors.WithLabelValues(method).Inc()
 			continue
 		}
 		if err = fn(tx); err != nil {
 			var errDup pkg.ErrDuplicateAction
 			if errors.As(err, &errDup) || err == pkg.ErrInsufficientFunds {
+				_ = tx.Rollback(ctx)
 				return err
 			}
 			pkg.MetricDBErrors.WithLabelValues(method).Inc()
-			_ = tx.Rollback()
+			_ = tx.Rollback(ctx)
 			continue
 		}
 		select {
 		case <-ctx.Done():
-			_ = tx.Rollback()
+			_ = tx.Rollback(ctx)
 			return ctx.Err()
 		default:
 		}
-		if err = tx.Commit(); err != nil {
+		if err = tx.Commit(ctx); err != nil {
 			pkg.MetricDBErrors.WithLabelValues(method).Inc()
-			_ = tx.Rollback()
+			_ = tx.Rollback(ctx)
 			continue
 		}
 		pkg.MetricDBTime.WithLabelValues(method).Observe(time.Since(started).Seconds())
@@ -101,13 +118,10 @@ func (pg *PG) tx(ctx context.Context, method string, fn func(tx *sqlx.Tx) error)
 
 // Truncate for tests
 func (pg *PG) Truncate() error {
-	_, err := pg.db.Exec("TRUNCATE TABLE wallet;")
+	_, err := pg.db.Exec(context.Background(), "TRUNCATE TABLE wallet;")
 	if err != nil {
 		return err
 	}
-	_, err = pg.db.Exec("TRUNCATE TABLE transaction;")
-	if err != nil {
-		return err
-	}
-	return nil
+	_, err = pg.db.Exec(context.Background(), "TRUNCATE TABLE transaction;")
+	return err
 }

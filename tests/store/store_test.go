@@ -25,7 +25,8 @@ type PgStoreSuite struct {
 func (s *PgStoreSuite) SetupSuite() {
 	log := &logrus.Logger{}
 	var err error
-	s.pg, err = pgStore.GetPGStore(log, "postgresql://user:user_pw@localhost:5433/payments?sslmode=disable")
+	ctx := context.Background()
+	s.pg, err = pgStore.GetPGStore(ctx, log, "postgresql://user:user_pw@localhost:5433/payments?sslmode=disable")
 	require.NoError(s.T(), err)
 	err = s.pg.Migrate(migrate.Up)
 	require.NoError(s.T(), err)
@@ -44,8 +45,7 @@ func (s *PgStoreSuite) TearDownTest() {
 func (s *PgStoreSuite) TearDownSuite() {
 	err := s.pg.Migrate(migrate.Down)
 	require.NoError(s.T(), err)
-	err = s.pg.DC()
-	require.NoError(s.T(), err)
+	s.pg.DC()
 }
 
 func (s *PgStoreSuite) TestCreateWallets() {

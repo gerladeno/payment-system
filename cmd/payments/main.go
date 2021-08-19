@@ -25,25 +25,22 @@ var version = "0.0.0"
 func main() {
 	log := getLogger()
 	log.Infof("starting payment system service version %s", version)
-	pg, err := pgStore.GetPGStore(log, os.Getenv("PG_DSN"))
+	ctx := context.Background()
+	pg, err := pgStore.GetPGStore(ctx, log, os.Getenv("PG_DSN"))
 	if err != nil {
 		log.Fatalf("failed to get pgStore: %s", err)
 	}
-	defer func() {
-		if err := pg.DC(); err != nil {
-			log.Errorf("err disconnecting from pg: %s", err)
-		}
-	}()
+	defer pg.DC()
 	if err = pg.Migrate(migrate.Up); err != nil {
 		log.Fatalf("err migrating pg store: %s", err)
 	}
 	router := rest.NewRouter(log, pg, pg, version)
-	if err = startServer(router, log); err != nil {
+	if err = startServer(ctx, router, log); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func startServer(router http.Handler, log *logrus.Logger) error {
+func startServer(ctx context.Context, router http.Handler, log *logrus.Logger) error {
 	log.Infof("starting server on port %d", port)
 	s := &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
@@ -66,7 +63,7 @@ func startServer(router http.Handler, log *logrus.Logger) error {
 	case <-sigCh:
 	}
 	log.Info("terminating...")
-	gfCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	gfCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	return s.Shutdown(gfCtx)
 }

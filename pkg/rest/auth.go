@@ -22,6 +22,7 @@ func ClientFromCtx(ctx context.Context) *Client {
 	return &Client{Name: "unknown", LimitRPS: 1}
 }
 
+// TODO proper authentication, add client ID to context
 func auth(clientStore ClientStore) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
