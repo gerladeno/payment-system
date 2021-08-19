@@ -179,7 +179,7 @@ func (pg *PG) Report(ctx context.Context, wallet string, from, to *time.Time, tT
 		queryBuilder.WriteString(fmt.Sprintf("AND ts >= timestamp '%s'\n", from.Format(pgDateTimeFmt)))
 	}
 	if to != nil {
-		queryBuilder.WriteString(fmt.Sprintf("AND ts <= timestamp '%s'\n", to.Format(pgDateTimeFmt)))
+		queryBuilder.WriteString(fmt.Sprintf("AND ts < timestamp '%s'\n", to.Add(24*time.Hour).Format(pgDateTimeFmt)))
 	}
 	result := make([]Transaction, 0)
 	tmp := make([]transaction, 0)

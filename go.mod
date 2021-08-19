@@ -3,7 +3,7 @@ module payment-system
 go 1.16
 
 require (
-	github.com/georgysavva/scany v0.2.9 // indirect
+	github.com/georgysavva/scany v0.2.9
 	github.com/getsentry/sentry-go v0.11.0 // indirect
 	github.com/go-chi/chi v1.5.4
 	github.com/go-chi/cors v1.2.0
@@ -11,9 +11,7 @@ require (
 	github.com/gocarina/gocsv v0.0.0-20210516172204-ca9e8a8ddea8
 	github.com/google/uuid v1.1.2
 	github.com/jackc/pgconn v1.10.0
-	github.com/jackc/pgx v3.6.2+incompatible // indirect
 	github.com/jackc/pgx/v4 v4.13.0
-	github.com/jmoiron/sqlx v1.3.4
 	github.com/onrik/logrus v0.9.0
 	github.com/prometheus/client_golang v1.11.0
 	github.com/rubenv/sql-migrate v0.0.0-20210614095031-55d5740dbbcc

@@ -3,10 +3,29 @@ version: "2"
 services:
   pg:
     image: postgres
+    container_name: pg_payments
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: user_pw
       POSTGRES_DB: payments
     ports:
       - "5433:5432"
+    networks:
+      - payments
     command: [ "postgres", "-c", "log_statement=all" ]
+
+  payments:
+    build: .
+    container_name: payments
+    environment:
+      PG_DSN: postgresql://user:user_pw@pg:5432/payments?sslmode=disable
+    ports:
+      - "3000:3000"
+    networks:
+      - payments
+    depends_on:
+      - pg
+    restart: on-failure
+
+networks:
+  payments:

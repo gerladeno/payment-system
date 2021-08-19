@@ -33,6 +33,9 @@ func GetPGStore(ctx context.Context, log *logrus.Logger, dsn string) (*PG, error
 	config.ConnConfig.PreferSimpleProtocol = true
 	config.MaxConns = maxConnectionsPools
 	db, err := pgxpool.ConnectConfig(ctx, config)
+	if err != nil {
+		return nil, err
+	}
 	if err = db.Ping(ctx); err != nil {
 		return nil, err
 	}
@@ -89,13 +92,12 @@ func (pg *PG) tx(ctx context.Context, method string, fn func(tx pgx.Tx) error) e
 			continue
 		}
 		if err = fn(tx); err != nil {
+			_ = tx.Rollback(ctx)
 			var errDup pkg.ErrDuplicateAction
 			if errors.As(err, &errDup) || err == pkg.ErrInsufficientFunds {
-				_ = tx.Rollback(ctx)
 				return err
 			}
 			pkg.MetricDBErrors.WithLabelValues(method).Inc()
-			_ = tx.Rollback(ctx)
 			continue
 		}
 		select {

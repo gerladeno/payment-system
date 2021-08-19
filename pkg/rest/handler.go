@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const dateFmt = `2006-01-02`
+const DateFmt = `2006-01-02`
 
 var ErrInvalidUUIDFormat = errors.New("err invalid uuid format")
 var ErrWalletNotSpecified = errors.New("err wallet not specified in the query")
@@ -38,6 +38,9 @@ func NewHandler(log *logrus.Logger, walletStore WalletStore) *Handler {
 		log:         log,
 	}
 }
+
+// TODO remove all ClientFromCtx and CheckOwnerWallet clauses below or add proper authorization mechanics
+// currently ClientFromCtx always returns "unknown" Client with ID 0 and all created wallets belong to it
 
 func (h *Handler) GetWallet(w http.ResponseWriter, r *http.Request) {
 	wallet, err := parseAndValidateWallet(r, "wallet")
@@ -307,7 +310,7 @@ func parseTransactionType(r *http.Request) (pgStore.TransactionType, error) {
 		return pgStore.TransactionTransferFunds, nil
 	case "3", "transferto":
 		return pgStore.TransactionTransferFundsTo, nil
-	case "":
+	case "", "-1":
 		return pgStore.AllTransactions, nil
 	default:
 		return 0, pkg.ErrInvalidTransactionType
@@ -319,7 +322,7 @@ func parseDate(r *http.Request, name string) (*time.Time, error) {
 	if s == "" {
 		return nil, nil
 	}
-	t, err := time.Parse(dateFmt, s)
+	t, err := time.Parse(DateFmt, s)
 	return &t, err
 }
 
