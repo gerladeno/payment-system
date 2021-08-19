@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgconn"
 	"github.com/jmoiron/sqlx"
+	"payment-system/pkg"
 	"strings"
 	"time"
 )
@@ -46,27 +47,8 @@ FROM wallet
 WHERE wallet = $1
 `
 
-var ErrInsufficientFunds = errors.New("err wallet with uuid specified doesn't have enough money on the balance")
-var ErrWalletNotFound = errors.New("err wallet with uuid specified was not found")
-var ErrInvalidTransactionType = errors.New("unknown transaction type")
-
-type ErrDuplicateAction string
-
-func (e ErrDuplicateAction) Error() string {
-	return fmt.Sprintf("duplicate key: %s", string(e))
-}
-
-type Wallet struct {
-	Amount  float64   `db:"amount" json:"amount"`
-	Wallet  string    `db:"wallet" json:"wallet"`
-	Owner   int       `db:"owner" json:"owner"`
-	Status  int8      `db:"status" json:"status"`
-	Updated time.Time `db:"updated" json:"updated"`
-	Created time.Time `db:"created" json:"created"`
-}
-
-func (pg *PG) GetWallet(ctx context.Context, wallet string) (Wallet, error) {
-	result := Wallet{}
+func (pg *PG) GetWallet(ctx context.Context, wallet string) (pkg.Wallet, error) {
+	result := pkg.Wallet{}
 	err := pg.tx(ctx, "GetWallet", func(tx *sqlx.Tx) error {
 		return tx.GetContext(ctx, &result, getWalletQuery, wallet)
 	})
@@ -84,7 +66,7 @@ func (pg *PG) CreateWallet(ctx context.Context, wallet string, owner int) error 
 			return err
 		}
 		if n == 0 {
-			return ErrDuplicateAction(wallet)
+			return pkg.ErrDuplicateAction(wallet)
 		}
 		return nil
 	})
@@ -101,7 +83,7 @@ func (pg *PG) DepositWithdraw(ctx context.Context, wallet string, amount float64
 			return err
 		}
 		if n == 0 {
-			return ErrInsufficientFunds
+			return pkg.ErrInsufficientFunds
 		}
 		var tType TransactionType
 		if amount > 0 {
@@ -114,7 +96,7 @@ func (pg *PG) DepositWithdraw(ctx context.Context, wallet string, amount float64
 		if err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr); pgErr.Code == "23505" {
-				return ErrDuplicateAction(key)
+				return pkg.ErrDuplicateAction(key)
 			}
 			return err
 		}
@@ -133,14 +115,14 @@ func (pg *PG) TransferFunds(ctx context.Context, from, to string, amount float64
 			return err
 		}
 		if n == 0 {
-			return ErrInsufficientFunds
+			return pkg.ErrInsufficientFunds
 		}
 		query := `INSERT INTO transaction (type, wallet, wallet_receiver, key, amount) VALUES ($1, $2, $3, $4, $5)`
 		_, err = tx.ExecContext(ctx, query, TransactionTransferFunds, from, to, key, amount)
 		if err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr); pgErr.Code == "23505" {
-				return ErrDuplicateAction(key)
+				return pkg.ErrDuplicateAction(key)
 			}
 			return err
 		}
@@ -198,6 +180,8 @@ func (pg *PG) Report(ctx context.Context, wallet string, from, to *time.Time, tT
 		queryBuilder.WriteString("AND wallet = $1 AND type = 2\n")
 	case AllTransactions:
 		queryBuilder.WriteString("AND (wallet = $1 OR wallet_receiver = $1)\n")
+	default:
+		return nil, pkg.ErrInvalidTransactionType
 	}
 	if from != nil {
 		queryBuilder.WriteString(fmt.Sprintf("AND ts >= timestamp '%s'\n", from.Format(pgDateTimeFmt)))
@@ -234,7 +218,7 @@ func (pg *PG) CheckOwnerWallet(ctx context.Context, wallet string, owner int) (b
 	err := pg.db.GetContext(ctx, &tmp, ownerWalletQuery, wallet)
 	switch err {
 	case sql.ErrNoRows:
-		return false, ErrWalletNotFound
+		return false, pkg.ErrWalletNotFound
 	case nil:
 		if tmp != owner {
 			return false, nil

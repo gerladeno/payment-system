@@ -1,20 +1,26 @@
 package pkg
 
-import "context"
+import (
+	"errors"
+	"fmt"
+	"time"
+)
 
-type Client struct {
-	ID       int
-	Name     string
-	LimitRPS int
+var ErrInsufficientFunds = errors.New("err wallet with uuid specified doesn't have enough money on the balance")
+var ErrWalletNotFound = errors.New("err wallet with uuid specified was not found")
+var ErrInvalidTransactionType = errors.New("unknown transaction type")
+
+type ErrDuplicateAction string
+
+func (e ErrDuplicateAction) Error() string {
+	return fmt.Sprintf("duplicate key: %s", string(e))
 }
 
-type ClientCtxKeyType struct{}
-
-var ClientCtxKey ClientCtxKeyType
-
-func ClientFromCtx(ctx context.Context) *Client {
-	if c, ok := ctx.Value(ClientCtxKey).(*Client); ok {
-		return c
-	}
-	return &Client{Name: "unknown", LimitRPS: 1}
+type Wallet struct {
+	Amount  float64   `db:"amount" json:"amount"`
+	Wallet  string    `db:"wallet" json:"wallet"`
+	Owner   int       `db:"owner" json:"owner"`
+	Status  int8      `db:"status" json:"status"`
+	Updated time.Time `db:"updated" json:"updated"`
+	Created time.Time `db:"created" json:"created"`
 }

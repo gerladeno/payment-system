@@ -36,6 +36,10 @@ func GetPGStore(log *logrus.Logger, dsn string) (*PG, error) {
 	}, nil
 }
 
+func (pg *PG) DC() error {
+	return pg.db.Close()
+}
+
 func (pg *PG) Migrate(direction migrate.MigrationDirection) error {
 	assetDir := func() func(string) ([]string, error) {
 		return func(path string) ([]string, error) {
@@ -69,8 +73,8 @@ func (pg *PG) tx(ctx context.Context, method string, fn func(tx *sqlx.Tx) error)
 			continue
 		}
 		if err = fn(tx); err != nil {
-			var errDup ErrDuplicateAction
-			if errors.As(err, &errDup) || err == ErrInsufficientFunds {
+			var errDup pkg.ErrDuplicateAction
+			if errors.As(err, &errDup) || err == pkg.ErrInsufficientFunds {
 				return err
 			}
 			pkg.MetricDBErrors.WithLabelValues(method).Inc()
@@ -97,11 +101,11 @@ func (pg *PG) tx(ctx context.Context, method string, fn func(tx *sqlx.Tx) error)
 
 // Truncate for tests
 func (pg *PG) Truncate() error {
-	_, err := pg.db.Exec( "TRUNCATE TABLE wallet;")
+	_, err := pg.db.Exec("TRUNCATE TABLE wallet;")
 	if err != nil {
 		return err
 	}
-	_, err = pg.db.Exec( "TRUNCATE TABLE transaction;")
+	_, err = pg.db.Exec("TRUNCATE TABLE transaction;")
 	if err != nil {
 		return err
 	}

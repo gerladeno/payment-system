@@ -29,10 +29,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to get pgStore: %s", err)
 	}
+	defer func() {
+		if err := pg.DC(); err != nil {
+			log.Errorf("err disconnecting from pg: %s", err)
+		}
+	}()
 	if err = pg.Migrate(migrate.Up); err != nil {
 		log.Fatalf("err migrating pg store: %s", err)
 	}
-	router := rest.NewRouter(log, pg, version)
+	router := rest.NewRouter(log, pg, pg, version)
 	if err = startServer(router, log); err != nil {
 		log.Fatal(err)
 	}

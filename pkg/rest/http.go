@@ -10,12 +10,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"payment-system/pkg"
 	"payment-system/pkg/pgStore"
 	"time"
 )
 
+type ClientStore interface {
+}
+
 type WalletStore interface {
-	GetWallet(ctx context.Context, wallet string) (pgStore.Wallet, error)
+	GetWallet(ctx context.Context, wallet string) (pkg.Wallet, error)
 	CreateWallet(ctx context.Context, wallet string, owner int) error
 	DepositWithdraw(ctx context.Context, wallet string, amount float64, key string) error
 	TransferFunds(ctx context.Context, from, to string, amount float64, key string) error
@@ -23,7 +27,7 @@ type WalletStore interface {
 	CheckOwnerWallet(ctx context.Context, wallet string, owner int) (bool, error)
 }
 
-func NewRouter(log *logrus.Logger, walletStore WalletStore, version string) *chi.Mux {
+func NewRouter(log *logrus.Logger, clientStore ClientStore, walletStore WalletStore, version string) *chi.Mux {
 	r := chi.NewRouter()
 	h := NewHandler(log, walletStore)
 	r.Use(middleware.Recoverer)
@@ -38,14 +42,14 @@ func NewRouter(log *logrus.Logger, walletStore WalletStore, version string) *chi
 		r.Use(middleware.Timeout(30 * time.Second))
 		r.Use(middleware.Throttle(30))
 		r.Use(httprate.LimitByIP(1000, time.Minute))
-		r.Use(auth(walletStore))
+		r.Use(auth(clientStore))
 		r.Route("/v1", func(r chi.Router) {
-			r.Get("/createWallet", h.createWallet)
-			r.Get("/getWallet", h.getWallet)
-			r.Get("/deposit", h.deposit)
-			r.Get("/withdraw", h.withdraw)
-			r.Get("/transferFunds", h.transferFunds)
-			r.Get("/report", h.createReport)
+			r.Get("/createWallet", h.CreateWallet)
+			r.Get("/getWallet", h.GetWallet)
+			r.Get("/deposit", h.Deposit)
+			r.Get("/withdraw", h.Withdraw)
+			r.Get("/transferFunds", h.TransferFunds)
+			r.Get("/report", h.CreateReport)
 		})
 	})
 	return r

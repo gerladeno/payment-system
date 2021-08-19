@@ -39,7 +39,7 @@ func NewHandler(log *logrus.Logger, walletStore WalletStore) *Handler {
 	}
 }
 
-func (h *Handler) getWallet(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetWallet(w http.ResponseWriter, r *http.Request) {
 	wallet, err := parseAndValidateWallet(r, "wallet")
 	if err != nil {
 		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
@@ -47,9 +47,9 @@ func (h *Handler) getWallet(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.walletStore.GetWallet(r.Context(), wallet)
 	if err != nil {
-		writeErrResponse(w, fmt.Sprintf("Not Found: %s", pgStore.ErrWalletNotFound), http.StatusNotFound)
+		writeErrResponse(w, fmt.Sprintf("Not Found: %s", pkg.ErrWalletNotFound), http.StatusNotFound)
 	}
-	owner := pkg.ClientFromCtx(r.Context()).ID
+	owner := ClientFromCtx(r.Context()).ID
 	if result.Owner != owner {
 		writeErrResponse(w, "Forbidden", http.StatusForbidden)
 		return
@@ -57,15 +57,15 @@ func (h *Handler) getWallet(w http.ResponseWriter, r *http.Request) {
 	writeOkResponse(w, result)
 }
 
-func (h *Handler) createWallet(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreateWallet(w http.ResponseWriter, r *http.Request) {
 	wallet, err := parseAndValidateWallet(r, "wallet")
 	if err != nil {
 		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
 		return
 	}
-	owner := pkg.ClientFromCtx(r.Context()).ID
+	owner := ClientFromCtx(r.Context()).ID
 	if err = h.walletStore.CreateWallet(r.Context(), wallet, owner); err != nil {
-		if _, ok := err.(pgStore.ErrDuplicateAction); ok {
+		if _, ok := err.(pkg.ErrDuplicateAction); ok {
 			writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
 			return
 		}
@@ -76,7 +76,7 @@ func (h *Handler) createWallet(w http.ResponseWriter, r *http.Request) {
 	writeOkResponse(w, "ok")
 }
 
-func (h *Handler) deposit(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Deposit(w http.ResponseWriter, r *http.Request) {
 	wallet, err := parseAndValidateWallet(r, "wallet")
 	if err != nil {
 		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
@@ -98,7 +98,7 @@ func (h *Handler) deposit(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = h.walletStore.CheckOwnerWallet(r.Context(), wallet, 0)
 	switch err {
-	case pgStore.ErrWalletNotFound:
+	case pkg.ErrWalletNotFound:
 		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
 		return
 	case nil:
@@ -109,12 +109,12 @@ func (h *Handler) deposit(w http.ResponseWriter, r *http.Request) {
 	}
 	err = h.walletStore.DepositWithdraw(r.Context(), wallet, amount, key)
 	switch err {
-	case pgStore.ErrInsufficientFunds:
+	case pkg.ErrInsufficientFunds:
 		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
 		return
 	case nil:
 	default:
-		if _, ok := err.(pgStore.ErrDuplicateAction); ok {
+		if _, ok := err.(pkg.ErrDuplicateAction); ok {
 			writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
 			return
 		}
@@ -125,7 +125,7 @@ func (h *Handler) deposit(w http.ResponseWriter, r *http.Request) {
 	writeOkResponse(w, "ok")
 }
 
-func (h *Handler) withdraw(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
 	wallet, err := parseAndValidateWallet(r, "wallet")
 	if err != nil {
 		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
@@ -145,7 +145,7 @@ func (h *Handler) withdraw(w http.ResponseWriter, r *http.Request) {
 		writeErrResponse(w, "Bad Request: transaction key not specified", http.StatusBadRequest)
 		return
 	}
-	owner := pkg.ClientFromCtx(r.Context()).ID
+	owner := ClientFromCtx(r.Context()).ID
 	ok, err := h.walletStore.CheckOwnerWallet(r.Context(), wallet, owner)
 	if err != nil {
 		h.log.Warnf("err checking wallet %s: %s", wallet, err)
@@ -158,12 +158,12 @@ func (h *Handler) withdraw(w http.ResponseWriter, r *http.Request) {
 	}
 	err = h.walletStore.DepositWithdraw(r.Context(), wallet, -amount, key)
 	switch err {
-	case pgStore.ErrInsufficientFunds:
+	case pkg.ErrInsufficientFunds:
 		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
 		return
 	case nil:
 	default:
-		if _, ok := err.(pgStore.ErrDuplicateAction); ok {
+		if _, ok := err.(pkg.ErrDuplicateAction); ok {
 			writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
 			return
 		}
@@ -174,7 +174,7 @@ func (h *Handler) withdraw(w http.ResponseWriter, r *http.Request) {
 	writeOkResponse(w, "ok")
 }
 
-func (h *Handler) transferFunds(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) TransferFunds(w http.ResponseWriter, r *http.Request) {
 	from, err := parseAndValidateWallet(r, "from")
 	if err != nil {
 		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
@@ -199,7 +199,7 @@ func (h *Handler) transferFunds(w http.ResponseWriter, r *http.Request) {
 		writeErrResponse(w, "Bad Request: transaction key not specified", http.StatusBadRequest)
 		return
 	}
-	owner := pkg.ClientFromCtx(r.Context()).ID
+	owner := ClientFromCtx(r.Context()).ID
 	ok, err := h.walletStore.CheckOwnerWallet(r.Context(), from, owner)
 	if err != nil {
 		h.log.Warnf("err checking wallet %s: %s", from, err)
@@ -212,7 +212,7 @@ func (h *Handler) transferFunds(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = h.walletStore.CheckOwnerWallet(r.Context(), to, 0)
 	switch err {
-	case pgStore.ErrWalletNotFound:
+	case pkg.ErrWalletNotFound:
 		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
 		return
 	case nil:
@@ -223,12 +223,12 @@ func (h *Handler) transferFunds(w http.ResponseWriter, r *http.Request) {
 	}
 	err = h.walletStore.TransferFunds(r.Context(), from, to, amount, key)
 	switch err {
-	case pgStore.ErrInsufficientFunds:
+	case pkg.ErrInsufficientFunds:
 		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
 		return
 	case nil:
 	default:
-		if _, ok := err.(pgStore.ErrDuplicateAction); ok {
+		if _, ok := err.(pkg.ErrDuplicateAction); ok {
 			writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
 			return
 		}
@@ -239,7 +239,7 @@ func (h *Handler) transferFunds(w http.ResponseWriter, r *http.Request) {
 	writeOkResponse(w, "ok")
 }
 
-func (h *Handler) createReport(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreateReport(w http.ResponseWriter, r *http.Request) {
 	wallet, err := parseAndValidateWallet(r, "wallet")
 	if err != nil {
 		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
@@ -260,7 +260,7 @@ func (h *Handler) createReport(w http.ResponseWriter, r *http.Request) {
 		writeErrResponse(w, fmt.Sprintf("Bad Request: %s", err), http.StatusBadRequest)
 		return
 	}
-	owner := pkg.ClientFromCtx(r.Context()).ID
+	owner := ClientFromCtx(r.Context()).ID
 	ok, err := h.walletStore.CheckOwnerWallet(r.Context(), wallet, owner)
 	if err != nil {
 		h.log.Warnf("err checking wallet %s: %s", wallet, err)
@@ -310,7 +310,7 @@ func parseTransactionType(r *http.Request) (pgStore.TransactionType, error) {
 	case "":
 		return pgStore.AllTransactions, nil
 	default:
-		return 0, pgStore.ErrInvalidTransactionType
+		return 0, pkg.ErrInvalidTransactionType
 	}
 }
 

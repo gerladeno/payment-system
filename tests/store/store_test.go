@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"payment-system/pkg"
 	"payment-system/pkg/pgStore"
 	"sync"
 	"testing"
@@ -43,6 +44,8 @@ func (s *PgStoreSuite) TearDownTest() {
 func (s *PgStoreSuite) TearDownSuite() {
 	err := s.pg.Migrate(migrate.Down)
 	require.NoError(s.T(), err)
+	err = s.pg.DC()
+	require.NoError(s.T(), err)
 }
 
 func (s *PgStoreSuite) TestCreateWallets() {
@@ -50,7 +53,7 @@ func (s *PgStoreSuite) TestCreateWallets() {
 	err := s.pg.CreateWallet(s.ctx, uid.String(), 0)
 	require.NoError(s.T(), err)
 	err = s.pg.CreateWallet(s.ctx, uid.String(), 0)
-	require.ErrorIs(s.T(), err, pgStore.ErrDuplicateAction(uid.String()))
+	require.ErrorIs(s.T(), err, pkg.ErrDuplicateAction(uid.String()))
 	var wg sync.WaitGroup
 	for i := 0; i < 200; i++ {
 		wg.Add(1)
@@ -71,7 +74,7 @@ func (s *PgStoreSuite) TestDepositWithdraw() {
 	err = s.pg.DepositWithdraw(s.ctx, uid.String(), 1000, "1")
 	require.NoError(s.T(), err)
 	err = s.pg.DepositWithdraw(s.ctx, uid.String(), 1000, "1")
-	require.ErrorIs(s.T(), err, pgStore.ErrDuplicateAction("1"))
+	require.ErrorIs(s.T(), err, pkg.ErrDuplicateAction("1"))
 	err = s.pg.DepositWithdraw(s.ctx, uid.String(), 1000, "2")
 	require.NoError(s.T(), err)
 	var wg sync.WaitGroup
@@ -85,7 +88,7 @@ func (s *PgStoreSuite) TestDepositWithdraw() {
 		}()
 	}
 	err = s.pg.DepositWithdraw(s.ctx, uid.String(), -5000, "2000")
-	require.ErrorIs(s.T(), err, pgStore.ErrInsufficientFunds)
+	require.ErrorIs(s.T(), err, pkg.ErrInsufficientFunds)
 	wg.Wait()
 	w, err := s.pg.GetWallet(s.ctx, uid.String())
 	require.NoError(s.T(), err)
@@ -120,7 +123,7 @@ func (s *PgStoreSuite) TestTransferFunds() {
 	err = s.pg.TransferFunds(s.ctx, uid1.String(), uid2.String(), 0.5, "2")
 	require.NoError(s.T(), err)
 	err = s.pg.TransferFunds(s.ctx, uid1.String(), uid2.String(), 0.5, "2")
-	require.ErrorIs(s.T(), err, pgStore.ErrDuplicateAction("2"))
+	require.ErrorIs(s.T(), err, pkg.ErrDuplicateAction("2"))
 	var wg sync.WaitGroup
 	for i := 3; i < 103; i ++ {
 		i:=i
@@ -132,7 +135,7 @@ func (s *PgStoreSuite) TestTransferFunds() {
 		}()
 	}
 	err = s.pg.TransferFunds(s.ctx, uid1.String(), uid2.String(), 5000, "2000")
-	require.ErrorIs(s.T(), err, pgStore.ErrInsufficientFunds)
+	require.ErrorIs(s.T(), err, pkg.ErrInsufficientFunds)
 	wg.Wait()
 	w, err := s.pg.GetWallet(s.ctx, uid1.String())
 	require.NoError(s.T(), err)
